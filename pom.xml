@@ -17,6 +17,13 @@
 
     <dependencies>
 
+        <!--配置redis的maven坐标-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+
         <!--阿里云短信服务-->
         <dependency>
             <groupId>com.aliyun</groupId>
