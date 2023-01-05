@@ -15,10 +15,12 @@ import com.itheima.service.SetmealDishService;
 import com.itheima.service.SetmealService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/setmeal")
@@ -36,6 +38,9 @@ public class SetmealController {
     @Autowired
     DishService dishService;
 
+    @Autowired
+    RedisTemplate redisTemplate;
+
     /**
      * 新增套餐
      *
@@ -44,8 +49,10 @@ public class SetmealController {
      */
     @PostMapping
     public R<String> save(@RequestBody SetmealDto setmealDto) {
-
         setmealService.saveWithDish(setmealDto);
+        //精确清理当前分类的缓存
+        String key = "setmeal_" + setmealDto.getCategoryId() + "_1";
+        redisTemplate.delete(key);
         return R.success("新增套餐成功");
     }
 
@@ -149,6 +156,9 @@ public class SetmealController {
     @PutMapping
     public R<String> update(@RequestBody SetmealDto setmealDto) {
         setmealService.updateWithDish(setmealDto);
+        //精确清理当前分类的缓存
+        String key = "setmeal_" + setmealDto.getCategoryId() + "_1";
+        redisTemplate.delete(key);
         return R.success("套餐信息修改成功");
     }
 
@@ -174,12 +184,29 @@ public class SetmealController {
      */
     @GetMapping("/list")
     public R<List<Setmeal>> list(Setmeal setmeal) {
+        //动态获取当前分类的key
+        String key = "setmeal_" + setmeal.getCategoryId() + "_1";
+        ;
+
+        //判断缓存是否存在
+        List<Setmeal> list;
+        list = (List<Setmeal>) redisTemplate.opsForValue().get(key);
+        //如果缓存存在，则直接返回
+        if (list != null) {
+            return R.success(list);
+        }
+        //如果缓存不存在，则查询数据库，并将查询到的集合添加到缓存中
+        list = new ArrayList<>();
+
         LambdaQueryWrapper<Setmeal> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(setmeal.getCategoryId() != null, Setmeal::getCategoryId, setmeal.getCategoryId());
         queryWrapper.eq(setmeal.getStatus() != null, Setmeal::getStatus, setmeal.getStatus());
         queryWrapper.orderByDesc(Setmeal::getUpdateTime);
 
-        List<Setmeal> list = setmealService.list(queryWrapper);
+        list = setmealService.list(queryWrapper);
+
+        //将查询到的集合添加到缓存中
+        redisTemplate.opsForValue().setIfAbsent(key, list, 60, TimeUnit.MINUTES);
 
         return R.success(list);
     }
@@ -187,6 +214,7 @@ public class SetmealController {
 
     /**
      * 点击套餐图片显示套餐里面的菜品信息
+     *
      * @param id
      * @return
      */

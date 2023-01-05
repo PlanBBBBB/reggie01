@@ -9,11 +9,13 @@ import com.itheima.utils.SMSUtils;
 import com.itheima.utils.ValidateCodeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 
 @RestController
@@ -23,6 +25,9 @@ public class UserController {
 
     @Autowired
     UserService userService;
+
+    @Autowired
+    RedisTemplate redisTemplate;
 
 
     /**
@@ -41,11 +46,14 @@ public class UserController {
             String code = String.valueOf(ValidateCodeUtils.generateValidateCode(4));
             log.info("code={}", code);
 
-            //调用阿里云的短信服务API发送短信
+            //调用阿里云的短信服务API发送短信,因为搞不定阿里云的短信服务，就不发送短信了，直接在控制台看验证码
             //SMSUtils.sendMessage("瑞吉外卖","",phone,code);
 
             //将验证码存入Session
-            session.setAttribute(phone, code);
+            //session.setAttribute(phone, code);
+
+            //将验证码存入redis中，并设置验证码过期时间
+            redisTemplate.opsForValue().setIfAbsent(phone,code,5, TimeUnit.MINUTES);
 
             return R.success("短信验证码发送成功");
         }
@@ -69,7 +77,11 @@ public class UserController {
         //获取验证码
         String code = map.get("code").toString();
         //从session中取出生成的验证码
-        Object codeInSession = session.getAttribute(phone);
+        //Object codeInSession = session.getAttribute(phone);
+
+        //从redis中取出生成的验证码
+        Object codeInSession = redisTemplate.opsForValue().get(phone);
+
         //比对验证码是否相同
         if (codeInSession != null && codeInSession.equals(code)) {
             //如果能比对成功，证明登录成功
@@ -84,6 +96,10 @@ public class UserController {
                 userService.save(user);
             }
             session.setAttribute("user", user.getId());
+
+            //登录成功后，删除redis中的数据
+            redisTemplate.delete(phone);
+
             return R.success(user);
         }
         return R.error("登录失败");
