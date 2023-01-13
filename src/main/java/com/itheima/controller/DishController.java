@@ -166,6 +166,8 @@ public class DishController {
             if (dish != null) {
                 dish.setStatus(status);
                 dishService.updateById(dish);
+                String key = "dish_" + dish.getCategoryId() + "_1";
+                redisTemplate.delete(key);
             }
         }
         return R.success("菜品售卖状态修改成功");
